@@ -785,13 +785,33 @@
 
     // Fetch leads
     async function fetchLeads() {
-      // Se houver Workflow URL, tenta carregar dela primeiro
+      // 1. Tenta carregar do Workflow (n8n) se existir URL
       if (WORKFLOW_URL) {
-        const res = await fetch(WORKFLOW_URL);
-        if (!res.ok) throw new Error(`Workflow HTTP ${res.status}`);
-        return res.json();
+        try {
+          // Tenta converter para https caso o usuário tenha esquecido
+          const secureUrl = WORKFLOW_URL.replace('http://', 'https://');
+          const res = await fetch(secureUrl);
+          if (res.ok) {
+            console.log("✅ Dados carregados via Workflow IA (HTTPS)");
+            return await res.json();
+          }
+        } catch (e) {
+          console.warn("⚠️ Falha ao conectar via HTTPS, tentando URL original...", e);
+        }
+
+        try {
+          const res = await fetch(WORKFLOW_URL);
+          if (res.ok) {
+            console.log("✅ Dados carregados via Workflow IA");
+            return await res.json();
+          }
+        } catch (e) {
+          console.error("❌ Falha crítica no Workflow (Mixed Content?). Pulando para Supabase...", e);
+        }
       }
 
+      // 2. Fallback: Carrega direto do Supabase
+      console.log("📡 Carregando dados via Supabase Direct...");
       const url = `${SUPA_URL}/rest/v1/leads?select=*&order=created_at.desc&limit=500`;
       const res = await fetch(url, {
         headers: {
@@ -799,7 +819,7 @@
           'Authorization': `Bearer ${SUPA_KEY}`
         }
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error(`Erro Supabase: ${res.status}`);
       return res.json();
     }
 
